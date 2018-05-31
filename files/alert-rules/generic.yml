@@ -1,0 +1,79 @@
+groups:
+- name: Generic Rules 
+  rules:
+
+#DISK SPACE MONITOR
+  - alert: DiskFillIn8Hours
+    expr: predict_linear(node_filesystem_free{mountpoint="/"}[1h], 8*3600) < 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.name }} / partition is getting full"
+      description: "{{ $labels.instance }} of IP {{ $labels.ip }} has Root disk partition getting full issue"		
+
+#DISK SPACE MONITOR
+  - alert: LowRootDiskSpace
+    expr: node_filesystem_free{mountpoint="/"} < 2147483648   #2 GB 
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.name }} has low space in / partition"
+      description: "{{ $labels.instance }} of IP {{ $labels.ip }} has exceeded the threshold of less than 2 GB with a value of {{ $value }} for 5 minutes"   
+
+
+#MEMORY MONITOR
+  - alert: LowFreeMemory
+    expr: node_memory_MemAvailable{} / node_memory_MemTotal{} * 100 < 30
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.name }} has low free memory"
+      description: "{{ $labels.instance }} of IP {{ $labels.ip }} has exceeded the threshold of less than 30% with a value of {{ $value }} for 2 minutes"
+
+#CPU MONITOR
+#  - alert: LowCPUIdle
+#    expr: irate(node_cpu{mode="idle"}[10m]) * 100  < 30
+#    for: 2m
+#    labels:
+#      severity: warning
+#    annotations:
+#      summary: "{{ $labels.name }} has low CPU idle time"
+#      description: "{{ $labels.instance }} of IP {{ $labels.ip }} has low CPU idle"
+
+
+#CPU MONITOR
+#Rule from https://rahulwa.com/post/monitoring-using-prometheus/
+  - alert: CPU_Threshold_Exceeded
+    expr: (100 * (1 - avg by(name)(irate(node_cpu{mode='idle'}[1h])))) > 85
+    for: 30m
+    labels: 
+      severity: warning
+    annotations:
+      summary: "{{ $labels.name }} has high CPU usage"
+      description: "{{ $labels.instance }} of IP {{ $labels.ip }} has exceeded the threshold of 85% with a value of {{ $value }} for 30 minutes"
+
+
+#URL MONITOR
+  - alert: URL is down
+    expr: probe_success{} == 0
+    for: 5m
+    labels: 
+      severity: warning
+    annotations:
+      summary: "{{ $labels.instance }} is down"
+      description: "{{ $labels.instance }} belonging to group: {{ $labels.group }},  has been down for more than 5 minutes."
+
+
+
+#UP Monitor 
+  - alert: Unreachable Error
+    expr: up{} == 0
+    for: 2m
+    labels: 
+      severity: warning
+    annotations:
+      summary: "{{ $labels.instance }} is down"
+      description: "{{ $labels.instance }} has been down for more than 2 minutes."

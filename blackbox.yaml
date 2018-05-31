@@ -1,0 +1,33 @@
+#Ansible Managed
+#Blackbox Exporter
+---
+ - hosts: alertmanager
+   become: true
+   gather_facts: false
+   tasks:
+     - name: Create directories
+       file:
+         path: "{{ item }}"
+         state: directory
+       with_items:
+         - /monitoring/blackbox
+
+     - name: Copy blackbox config file
+       copy:
+         src: files/blackbox-config.yml
+         dest: /monitoring/blackbox
+         owner: root 
+         group: root
+         mode: 0644
+
+     - name: Run/Restart Blackbox container
+       docker_container:
+         name: blackbox-unni
+         image: prom/blackbox-exporter:v0.12.0
+         state: started
+         restart: yes
+         network_mode: host
+         expose: 
+         - "9115:9115"
+         volumes:
+         - "/monitoring/blackbox/blackbox-config.yml:/etc/blackbox_exporter/config.yml"

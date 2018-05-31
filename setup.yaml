@@ -1,0 +1,280 @@
+--- 
+#OS: Ubuntu 16.04 
+ - hosts: prometheus
+   become: true
+   gather_facts: false
+   tasks:
+
+
+#Generic Configuration
+     - name: Create directories
+       file:
+         path: "{{ item }}"
+         state: directory
+       with_items:
+         - /monitoring
+         - /monitoring/prometheus
+         - /monitoring/prometheus/db
+         - /monitoring/grafana
+
+
+
+#Setting up DOCKER
+     - name: Add docker apt key 
+       apt_key:
+         url: https://download.docker.com/linux/ubuntu/gpg
+         state: present
+
+     - name: Add apt repo for Docker
+       apt_repository:
+         repo: "{{ item }}"
+         state: present
+         filename: dockerce.list
+       with_items:
+         - deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+
+
+     - name: Install packages
+       apt: name={{ item }} state=present update_cache=yes
+       with_items:
+         - telnet
+         - apt-transport-https 
+         - ca-certificates 
+         - curl 
+         - software-properties-common
+         - docker-ce
+         - docker-compose
+         - mailutils
+
+
+
+#Prometheus Setup
+     - name: Copy prometheus configuration file
+       copy:
+         src: files/prometheus.yml
+         dest: /monitoring/prometheus
+         owner: root 
+         group: root
+         mode: 0644
+
+     - name: Copy alert-rules directory
+       copy:
+         directory_mode:
+         src: files/alert-rules
+         dest: /monitoring/prometheus
+         owner: root 
+         group: root
+         mode: 0644
+
+     - name: Copy URL monitor target file
+       copy:
+         src: files/url-monitor-targets.json
+         dest: /monitoring/prometheus
+         owner: root 
+         group: root
+         mode: 0644
+
+     - name: Setting 777 permission for prometheus db directory
+       file:
+         path: /monitoring/prometheus/db
+         state: directory
+         mode: 0777
+
+
+#####Download prometheus zip file to use promtool
+     - name: Download & extract prometheus 2.2.1 from URL
+       unarchive:
+         src: https://github.com/prometheus/prometheus/releases/download/v2.2.1/prometheus-2.2.1.linux-amd64.tar.gz
+         dest: /opt
+         remote_src: yes
+
+     - name: Verify alert rules syntax
+       shell: "/opt/prometheus-*/promtool check rules /monitoring/prometheus/alert-rules/*.yml"
+       register: rule_out
+       changed_when: False
+
+     - name: Print Rule check output
+       debug: msg="{{ rule_out.stdout }}"
+
+
+     - name: Verify prometheus.yml syntax
+       shell: "/opt/prometheus-*/promtool check config /monitoring/prometheus/prometheus.yml"
+       changed_when: False
+
+
+
+     - name: Run/Restart Prometheus container
+       docker_container:
+         name: my-prometheus
+         hostname: prometheus.example.com
+         image: prom/prometheus:v2.2.1
+         state: started
+         restart: yes
+         network_mode: host
+         expose: 
+         - "9090:9090"
+         volumes:
+         - "/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+         - "/monitoring/prometheus/alert-rules:/etc/prometheus/alert-rules"
+         - "/monitoring/prometheus/db:/prometheus"
+         - "/usr/share/zoneinfo/Asia/Muscat:/etc/localtime"
+         - "/monitoring/prometheus/url-monitor-targets.json:/etc/prometheus/targets.json"
+
+
+
+#Grafana Setup
+     - name: Run/Restart Grafana container
+       docker_container:
+         name: my-grafana
+         image: grafana/grafana:5.1.2
+         state: started
+         restart: yes
+         user: root
+         network_mode: host
+         expose: 
+         - "3000:3000"
+         volumes:
+         - "/monitoring/grafana:/var/lib/grafana"
+         env:
+             GF_SERVER_ROOT_URL: http://grafana.example.com
+             GF_SECURITY_ADMIN_PASSWORD: secret
+             GF_INSTALL_PLUGINS: grafana-clock-panel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Alertmanager Setup
+ - hosts: alertmanager
+   become: true
+   gather_facts: false
+   tasks:
+     - name: change hostname to myserver
+       hostname:
+         name: "alertmanager.example.com"
+     
+
+     - name: Add alertmanager.example.com to /etc/hosts
+       lineinfile:  
+         dest: /etc/hosts
+         regexp: '^127\.0\.0\.1[ \t]+localhost'
+         line: '127.0.0.1 localhost alertmanager.example.com'
+         state: present
+
+
+     - name: Create directories
+       file:
+         path: "{{ item }}"
+         state: directory
+       with_items:
+         - /monitoring
+         - /monitoring/alertmanager
+
+     - name: Add docker apt key 
+       apt_key:
+         url: https://download.docker.com/linux/ubuntu/gpg
+         state: present
+
+     - name: Add apt repo for Docker
+       apt_repository:
+         repo: "{{ item }}"
+         state: present
+         filename: dockerce.list
+       with_items:
+         - deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+
+
+     - name: Install packages
+       apt: name={{ item }} state=present update_cache=yes
+       with_items:
+         - telnet
+         - apt-transport-https 
+         - ca-certificates 
+         - curl 
+         - software-properties-common
+         - docker-ce
+         - docker-compose
+         - mailutils
+         - nginx
+
+     - name: Copy alertmanager nginx file
+       copy:
+         src: files/alertmanager-site
+         dest: /etc/nginx/sites-enabled
+         owner: root 
+         group: root
+         mode: 0644
+       notify: restart nginx
+
+     - name: Copy alertmanager configuration file
+       copy:
+         src: files/config.yml
+         dest: /monitoring/alertmanager
+         owner: root 
+         group: root
+         mode: 0644
+
+
+
+#####Download alertmanager zip file to use amtool
+     - name: Download & extract alertmanager 0.14.0 from URL
+       unarchive:
+         src: https://github.com/prometheus/alertmanager/releases/download/v0.14.0/alertmanager-0.14.0.linux-amd64.tar.gz
+         dest: /opt
+         remote_src: yes
+
+     - name: Verify alertmanager config syntax
+       shell: "/opt/alert*/amtool check-config --alertmanager.url=http://alertmanager.example.com /monitoring/alertmanager/config.yml -v"
+       register: alert_out
+       changed_when: False
+
+     - name: Print alert syntax check output
+       debug: msg="{{ alert_out.stdout }}"
+
+
+    
+
+    
+     - name: Run/Restart Alertmanager container
+       docker_container:
+         name: my-alertmanager
+         hostname: alertmanager.example.com
+         image: prom/alertmanager:v0.14.0
+         state: started
+         restart: yes
+         network_mode: host
+         expose: 
+         - "9093:9093"
+         volumes:
+         - "/monitoring/alertmanager:/etc/alertmanager"
+         - "/usr/share/zoneinfo/Asia/Muscat:/etc/localtime"
+
+   handlers:
+     - name: restart nginx
+       service: name=nginx state=restarted
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

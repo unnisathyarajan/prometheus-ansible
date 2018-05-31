@@ -1,0 +1,22 @@
+[
+
+
+  {
+    "targets": [ "https://facebook.com"
+               ],
+    "labels": {
+      "group": "SocialMedia"
+    }
+  },
+
+
+
+  {
+    "targets": [ "http://google.com"
+               ],
+    "labels": {
+      "group": "SearchEngine"
+    }
+  }
+]
+
